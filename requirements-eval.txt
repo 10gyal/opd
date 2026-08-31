@@ -2,5 +2,4 @@ datasets>=4.7,<6
 math-verify[antlr4_13_2]>=0.8,<1
 python-dotenv>=1,<2
 transformers>=5.5.4,<6
-vllm>=0.22,<1
 wandb>=0.22,<1

@@ -7,9 +7,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import torch
 from datasets import load_dataset
 from dotenv import load_dotenv
-from transformers import AutoTokenizer
+from transformers import AutoModelForMultimodalLM, AutoTokenizer
 
 from utils import grade_math_response
 
@@ -36,7 +37,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-model-len", type=int, default=4096)
-    parser.add_argument("--gpu-memory-utilization", type=float, default=0.9)
     parser.add_argument(
         "--wandb-project", default=os.environ.get("WANDB_PROJECT", "opd")
     )
@@ -160,8 +160,6 @@ def _log_artifact(
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    from vllm import LLM, SamplingParams
-
     output_dir = Path(args.output_dir).expanduser()
     if not output_dir.is_absolute():
         output_dir = PROJECT_DIR / output_dir
@@ -181,20 +179,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         completed = _load_completed(records_path)
 
         tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
-        model = LLM(
-            model=args.model,
-            dtype="bfloat16",
+        if tokenizer.pad_token_id is None:
+            tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model = AutoModelForMultimodalLM.from_pretrained(
+            args.model,
+            dtype=torch.bfloat16,
             trust_remote_code=True,
-            max_model_len=args.max_model_len,
-            gpu_memory_utilization=args.gpu_memory_utilization,
-            seed=args.seed,
-            language_model_only=True,
+            attn_implementation="sdpa",
         )
-        sampling = SamplingParams(
-            temperature=args.temperature,
-            max_tokens=args.max_new_tokens,
-            seed=args.seed,
-        )
+        model.to("cuda")
+        model.eval()
+        model.config.use_cache = True
+        torch.manual_seed(args.seed)
+        torch.cuda.manual_seed_all(args.seed)
 
         pending = [
             example
@@ -206,13 +204,51 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             prompts = [
                 _chat_prompt(tokenizer, str(example["problem"])) for example in batch
             ]
-            outputs = model.generate(prompts, sampling, use_tqdm=True)
+            max_input_length = args.max_model_len - args.max_new_tokens
+            if max_input_length < 1:
+                raise ValueError("max-model-len must be greater than max-new-tokens")
+            inputs = tokenizer(
+                prompts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=max_input_length,
+            ).to("cuda")
+            generation_args: dict[str, Any] = {
+                "max_new_tokens": args.max_new_tokens,
+                "do_sample": args.temperature > 0,
+                "pad_token_id": tokenizer.pad_token_id,
+                "eos_token_id": tokenizer.eos_token_id,
+                "use_cache": True,
+            }
+            if args.temperature > 0:
+                generation_args["temperature"] = args.temperature
+            with torch.inference_mode():
+                sequences = model.generate(**inputs, **generation_args)
+            prompt_width = inputs["input_ids"].shape[1]
+            generated_only = sequences[:, prompt_width:]
+            responses = tokenizer.batch_decode(
+                generated_only,
+                skip_special_tokens=True,
+            )
             with records_path.open("a", encoding="utf-8") as file:
-                for example, output in zip(batch, outputs, strict=True):
-                    response = output.outputs[0].text
+                for index, (example, response) in enumerate(
+                    zip(batch, responses, strict=True)
+                ):
                     expected_reference = _reference(example)
                     correct, prediction, expected = grade_math_response(
                         response, expected_reference
+                    )
+                    token_ids = generated_only[index]
+                    eos_token_ids = tokenizer.eos_token_id
+                    if isinstance(eos_token_ids, int):
+                        eos_token_ids = [eos_token_ids]
+                    reached_token_limit = (
+                        token_ids.shape[0] >= args.max_new_tokens
+                        and not any(
+                            bool((token_ids == eos_token_id).any())
+                            for eos_token_id in eos_token_ids or []
+                        )
                     )
                     record = {
                         "unique_id": str(example.get("unique_id", "")),
@@ -223,8 +259,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                         "expected": expected,
                         "prediction": prediction,
                         "correct": correct,
-                        "reached_token_limit": len(output.outputs[0].token_ids)
-                        >= args.max_new_tokens,
+                        "reached_token_limit": reached_token_limit,
                         "response": response,
                     }
                     completed[record["unique_id"]] = record

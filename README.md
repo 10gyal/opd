@@ -85,7 +85,7 @@ python -m unittest discover -s tests -v
 ## Stand-alone evaluation
 
 Run the post-trained Qwen 3.5 0.8B model on the 500-problem test split of the
-Hendrycks MATH benchmark with vLLM:
+Hendrycks MATH benchmark with batched Transformers inference:
 
 ```bash
 python -m pip install -r requirements-eval.txt
