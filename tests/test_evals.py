@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from opd.evals import extract_boxed_answer
+from evals import extract_boxed_answer
 
 
 class EvalTest(unittest.TestCase):

@@ -4,7 +4,7 @@ from typing import Any
 
 from datasets import IterableDataset, load_dataset
 
-from .config import DatasetSettings
+from config import DatasetSettings
 
 
 def format_math_example(

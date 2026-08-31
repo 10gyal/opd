@@ -5,7 +5,7 @@ import unittest
 import torch
 import torch.nn.functional as F
 
-from opd.distillation import topk_soft_cross_entropy
+from distillation import topk_soft_cross_entropy
 
 
 class DistillationLossTest(unittest.TestCase):

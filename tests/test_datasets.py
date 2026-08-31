@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from opd.datasets import (
+from data import (
     _is_selected_level,
     format_math_example,
     tokenize_math_example,

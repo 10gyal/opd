@@ -8,7 +8,7 @@ import torch
 from datasets import load_dataset
 from transformers import TrainerCallback
 
-from .config import EvalSettings
+from config import EvalSettings
 
 
 def extract_boxed_answer(text: str) -> str | None:

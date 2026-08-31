@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from opd.config import load_settings
+from config import load_settings
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 

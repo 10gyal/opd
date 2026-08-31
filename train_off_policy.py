@@ -19,10 +19,10 @@ from transformers import (
 )
 from transformers.trainer_utils import get_last_checkpoint
 
-from opd.config import Settings, load_settings
-from opd.datasets import load_training_dataset
-from opd.distillation import topk_soft_cross_entropy
-from opd.evals import MathCallback
+from config import Settings, load_settings
+from data import load_training_dataset
+from distillation import topk_soft_cross_entropy
+from evals import MathCallback
 
 PROJECT_DIR = Path(__file__).resolve().parent
 
