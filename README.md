@@ -81,3 +81,21 @@ Run local tests with:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## Stand-alone evaluation
+
+Run the post-trained Qwen 3.5 0.8B model on the 500-problem test split of the
+Hendrycks MATH benchmark with vLLM:
+
+```bash
+python -m pip install -r requirements-eval.txt
+python hendrycks_math.py
+```
+
+The command uses greedy decoding, a 1,024-token generation limit, and the same
+`math-verify` grader as the training evaluations. It writes resumable records
+and a summary to `runs/qwen3.5-0.8b-hendrycks-math`. It also logs progress and
+the final result to the `opd` W&B project. Add `WANDB_API_KEY` to `.env` before
+the run. Use `--wandb-project`, `--wandb-entity`, and `--wandb-run-name` to
+change the W&B destination. Use `--wandb-mode offline` if the run has no W&B
+network connection.

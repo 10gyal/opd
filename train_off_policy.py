@@ -22,7 +22,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from config import Settings, load_settings
 from data import load_training_dataset
 from distillation import topk_soft_cross_entropy
-from evals import MathCallback
+from utils import MathCallback
 
 PROJECT_DIR = Path(__file__).resolve().parent
 
