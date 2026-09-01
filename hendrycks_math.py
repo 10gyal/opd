@@ -17,13 +17,20 @@ from transformers import (
     AutoTokenizer,
 )
 
-from utils import grade_math_response
+from utils import (
+    GRADING_VERSION,
+    GeneratedTokenPresencePenaltyProcessor,
+    grade_math_response,
+    select_balanced_math500_subset,
+    split_reasoning_and_final_response,
+)
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL = "Qwen/Qwen3.5-0.8B-Base"
-DEFAULT_OUTPUT_DIR = "runs/qwen3.5-0.8b-base-hendrycks-math"
-DEFAULT_WANDB_RUN_NAME = "qwen3.5-0.8b-base-hendrycks-math"
+DEFAULT_DATASET = "HuggingFaceH4/MATH-500"
+DEFAULT_OUTPUT_DIR = "runs/qwen3.5-0.8b-base-math500-balanced50"
+DEFAULT_WANDB_RUN_NAME = "qwen3.5-0.8b-base-math500-balanced50"
 DEFAULT_MAX_NEW_TOKENS = 4096
 DEFAULT_MAX_MODEL_LEN = 8192
 DEFAULT_PROMPT = """Problem:
@@ -35,16 +42,24 @@ Solve the problem. Put the final answer in \\boxed{{}}."""
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a model on MATH.")
     parser.add_argument("--model", default=DEFAULT_MODEL)
-    parser.add_argument(
-        "--dataset", default="nlile/hendrycks-MATH-benchmark"
-    )
+    parser.add_argument("--dataset", default=DEFAULT_DATASET)
     parser.add_argument("--dataset-config", default=None)
     parser.add_argument("--split", default="test")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--max-examples", type=int, default=500)
+    parser.add_argument("--max-examples", type=int, default=50)
+    parser.add_argument(
+        "--balanced-subset",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use a balanced 50-example MATH-500 subset.",
+    )
     parser.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--temperature", type=float, default=None)
+    parser.add_argument("--top-p", type=float, default=None)
+    parser.add_argument("--top-k", type=int, default=None)
+    parser.add_argument("--min-p", type=float, default=None)
+    parser.add_argument("--presence-penalty", type=float, default=None)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-model-len", type=int, default=DEFAULT_MAX_MODEL_LEN)
     parser.add_argument(
@@ -105,8 +120,31 @@ def _load_completed(path: Path) -> dict[str, dict[str, Any]]:
     with path.open(encoding="utf-8") as file:
         for line in file:
             record = json.loads(line)
-            completed[str(record["unique_id"])] = record
+            if record.get("grading_version") == GRADING_VERSION:
+                completed[str(record["unique_id"])] = record
     return completed
+
+
+def _resolve_sampling_parameters(args: argparse.Namespace) -> None:
+    if args.enable_thinking:
+        defaults = {
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0.0,
+            "presence_penalty": 1.5,
+        }
+    else:
+        defaults = {
+            "temperature": 0.0,
+            "top_p": 1.0,
+            "top_k": 0,
+            "min_p": 0.0,
+            "presence_penalty": 0.0,
+        }
+    for name, value in defaults.items():
+        if getattr(args, name) is None:
+            setattr(args, name, value)
 
 
 def _write_summary(
@@ -129,6 +167,11 @@ def _write_summary(
         "reached_token_limit": reached_limit,
         "max_new_tokens": args.max_new_tokens,
         "temperature": args.temperature,
+        "top_p": args.top_p,
+        "top_k": args.top_k,
+        "min_p": args.min_p,
+        "presence_penalty": args.presence_penalty,
+        "grading_version": GRADING_VERSION,
         "seed": args.seed,
     }
     path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
@@ -190,6 +233,7 @@ def _log_artifact(
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    _resolve_sampling_parameters(args)
     output_dir = Path(args.output_dir).expanduser()
     if not output_dir.is_absolute():
         output_dir = PROJECT_DIR / output_dir
@@ -205,7 +249,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             args.dataset_config,
             split=args.split,
         )
-        dataset = dataset.select(range(min(args.max_examples, len(dataset))))
+        if args.balanced_subset:
+            if args.max_examples != 50:
+                raise ValueError("The balanced MATH-500 subset has 50 examples")
+            dataset = select_balanced_math500_subset(dataset, args.seed)
+        else:
+            dataset = dataset.select(range(min(args.max_examples, len(dataset))))
         completed = _load_completed(records_path)
 
         tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
@@ -253,18 +302,34 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             }
             if args.temperature > 0:
                 generation_args["temperature"] = args.temperature
+                generation_args["top_p"] = args.top_p
+                generation_args["top_k"] = args.top_k
+                if args.min_p > 0:
+                    generation_args["min_p"] = args.min_p
+                if args.presence_penalty > 0:
+                    generation_args["logits_processor"] = [
+                        GeneratedTokenPresencePenaltyProcessor(
+                            args.presence_penalty,
+                            inputs["input_ids"].shape[1],
+                        )
+                    ]
             with torch.inference_mode():
                 sequences = model.generate(**inputs, **generation_args)
             prompt_width = inputs["input_ids"].shape[1]
             generated_only = sequences[:, prompt_width:]
-            responses = tokenizer.batch_decode(
+            raw_responses = tokenizer.batch_decode(
                 generated_only,
-                skip_special_tokens=True,
+                skip_special_tokens=False,
             )
             with records_path.open("a", encoding="utf-8") as file:
-                for index, (example, response) in enumerate(
-                    zip(batch, responses, strict=True)
+                for index, (example, raw_response) in enumerate(
+                    zip(batch, raw_responses, strict=True)
                 ):
+                    reasoning, response = split_reasoning_and_final_response(
+                        raw_response,
+                        expect_reasoning=args.enable_thinking,
+                        special_tokens=tuple(tokenizer.all_special_tokens),
+                    )
                     expected_reference = _reference(example)
                     correct, prediction, expected = grade_math_response(
                         response, expected_reference
@@ -281,6 +346,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                         )
                     )
                     record = {
+                        "grading_version": GRADING_VERSION,
                         "unique_id": str(example.get("unique_id", "")),
                         "problem": example["problem"],
                         "subject": example.get("subject"),
@@ -290,6 +356,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                         "prediction": prediction,
                         "correct": correct,
                         "reached_token_limit": reached_token_limit,
+                        "reasoning": reasoning,
                         "response": response,
                     }
                     completed[record["unique_id"]] = record

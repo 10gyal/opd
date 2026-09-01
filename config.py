@@ -38,6 +38,7 @@ class LoraSettings:
 class DatasetSettings:
     name: str
     config_name: str | None
+    config_names: tuple[str, ...]
     split: str
     levels: tuple[int, ...]
     prompt_template: str
@@ -83,10 +84,14 @@ class EvalSettings:
     split: str
     steps: tuple[int, ...]
     max_examples: int
+    balanced: bool
+    seed: int
     max_new_tokens: int
     temperature: float
     top_p: float
     top_k: int
+    min_p: float
+    presence_penalty: float
     batch_size: int
     prompt_template: str
 
@@ -148,6 +153,8 @@ def validate_settings(settings: Settings) -> None:
     _positive(settings.dataset.shuffle_buffer_size, "dataset.shuffle_buffer_size")
     if any(level < 1 or level > 5 for level in settings.dataset.levels):
         raise ValueError("dataset.levels values must be between 1 and 5")
+    if settings.dataset.config_name and settings.dataset.config_names:
+        raise ValueError("Use dataset.config_name or dataset.config_names, not both")
     _positive(settings.training.max_length, "training.max_length")
     _positive(
         settings.training.per_device_train_batch_size,
@@ -182,6 +189,8 @@ def validate_settings(settings: Settings) -> None:
         _positive(settings.eval.max_examples, "eval.max_examples")
         _positive(settings.eval.max_new_tokens, "eval.max_new_tokens")
         _positive(settings.eval.batch_size, "eval.batch_size")
+        if settings.eval.balanced and settings.eval.max_examples != 50:
+            raise ValueError("A balanced MATH-500 evaluation must use 50 examples")
         if settings.eval.temperature < 0:
             raise ValueError("eval.temperature must be zero or greater")
         if not 0 < settings.eval.top_p <= 1:
@@ -190,6 +199,10 @@ def validate_settings(settings: Settings) -> None:
             )
         if settings.eval.top_k < 0:
             raise ValueError("eval.top_k must be zero or greater")
+        if not 0 <= settings.eval.min_p <= 1:
+            raise ValueError("eval.min_p must be between zero and one")
+        if settings.eval.presence_penalty < 0:
+            raise ValueError("eval.presence_penalty must be zero or greater")
         if tuple(sorted(set(settings.eval.steps))) != settings.eval.steps:
             raise ValueError("eval.steps must be sorted and contain no duplicates")
         if any(
@@ -256,6 +269,9 @@ def load_settings(path: str | Path) -> Settings:
                 if dataset.get("config_name") is not None
                 else None
             ),
+            config_names=tuple(
+                str(config_name) for config_name in dataset.get("config_names", [])
+            ),
             split=str(dataset.get("split", "train")),
             levels=tuple(int(level) for level in dataset.get("levels", [])),
             prompt_template=str(
@@ -295,10 +311,14 @@ def load_settings(path: str | Path) -> Settings:
             split=str(evaluation.get("split", "train")),
             steps=tuple(int(step) for step in evaluation.get("steps", [])),
             max_examples=int(evaluation["max_examples"]),
+            balanced=bool(evaluation.get("balanced", False)),
+            seed=int(evaluation.get("seed", 42)),
             max_new_tokens=int(evaluation["max_new_tokens"]),
             temperature=float(evaluation.get("temperature", 0.0)),
             top_p=float(evaluation.get("top_p", 1.0)),
             top_k=int(evaluation.get("top_k", 0)),
+            min_p=float(evaluation.get("min_p", 0.0)),
+            presence_penalty=float(evaluation.get("presence_penalty", 0.0)),
             batch_size=int(evaluation.get("batch_size", 1)),
             prompt_template=str(
                 evaluation.get("prompt_template", "Problem:\n{problem}\n\nSolution:\n")

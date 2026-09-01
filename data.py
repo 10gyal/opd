@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from datasets import IterableDataset, load_dataset
+from datasets import IterableDataset, interleave_datasets, load_dataset
 
 from config import DatasetSettings
 
@@ -58,11 +58,20 @@ def load_training_dataset(
     tokenizer: Any,
     max_length: int,
 ) -> IterableDataset:
-    dataset = load_dataset(
-        settings.name,
-        settings.config_name,
-        split=settings.split,
-        streaming=True,
+    config_names = settings.config_names or (settings.config_name,)
+    sources = [
+        load_dataset(
+            settings.name,
+            config_name,
+            split=settings.split,
+            streaming=True,
+        )
+        for config_name in config_names
+    ]
+    dataset = (
+        sources[0]
+        if len(sources) == 1
+        else interleave_datasets(sources, seed=settings.seed)
     )
     if settings.levels:
         dataset = dataset.filter(

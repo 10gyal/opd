@@ -1,14 +1,148 @@
 from __future__ import annotations
 
 import json
+import random
+from collections import Counter
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
 import torch
 from datasets import load_dataset
-from transformers import TrainerCallback
+from transformers import LogitsProcessor, TrainerCallback
 
 from config import EvalSettings
+
+MATH500_SUBJECTS = (
+    "Algebra",
+    "Counting & Probability",
+    "Geometry",
+    "Intermediate Algebra",
+    "Number Theory",
+    "Prealgebra",
+    "Precalculus",
+)
+MATH500_LEVELS = (1, 2, 3, 4, 5)
+GRADING_VERSION = 2
+
+
+class GeneratedTokenPresencePenaltyProcessor(LogitsProcessor):
+    """Subtract a fixed penalty from tokens already present in the generation."""
+
+    def __init__(self, penalty: float, prompt_length: int) -> None:
+        self.penalty = penalty
+        self.prompt_length = prompt_length
+
+    def __call__(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+    ) -> torch.FloatTensor:
+        generated_ids = input_ids[:, self.prompt_length :]
+        if self.penalty == 0 or generated_ids.shape[1] == 0:
+            return scores
+        seen = torch.zeros_like(scores, dtype=torch.bool)
+        seen.scatter_(1, generated_ids, True)
+        return scores - seen.to(scores.dtype) * self.penalty
+
+
+def split_reasoning_and_final_response(
+    raw_response: str,
+    *,
+    expect_reasoning: bool,
+    special_tokens: tuple[str, ...] = (),
+) -> tuple[str | None, str]:
+    """Separate Qwen thinking content from its final answer."""
+
+    def clean(text: str) -> str:
+        for token in special_tokens:
+            if token not in {"<think>", "</think>"}:
+                text = text.replace(token, "")
+        return text.strip()
+
+    text = raw_response.strip()
+    close_marker = "</think>"
+    open_marker = "<think>"
+    if close_marker in text:
+        reasoning_text, final_text = text.split(close_marker, 1)
+        if open_marker in reasoning_text:
+            reasoning_text = reasoning_text.split(open_marker, 1)[1]
+        return clean(reasoning_text), clean(final_text)
+    if expect_reasoning:
+        if open_marker in text:
+            text = text.split(open_marker, 1)[1]
+        return clean(text), ""
+    return None, clean(text)
+
+
+def select_balanced_math500_subset(dataset: Any, seed: int) -> Any:
+    """Select 50 examples balanced across all MATH subjects and levels."""
+    groups: dict[tuple[str, int], list[int]] = {
+        (subject, level): []
+        for subject in MATH500_SUBJECTS
+        for level in MATH500_LEVELS
+    }
+    for index, example in enumerate(dataset):
+        key = (str(example.get("subject")), int(example.get("level", 0)))
+        if key in groups:
+            groups[key].append(index)
+
+    missing = [key for key, indices in groups.items() if len(indices) < 2]
+    if missing:
+        raise ValueError(
+            "MATH-500 needs at least two examples in each subject-level group; "
+            f"insufficient groups: {missing}"
+        )
+
+    rng = random.Random(seed)
+    subjects = list(MATH500_SUBJECTS)
+    rng.shuffle(subjects)
+    subject_targets = {subject: 7 for subject in MATH500_SUBJECTS}
+    subject_targets[subjects[0]] = 8
+
+    row_extras = {
+        subject: subject_targets[subject] - len(MATH500_LEVELS)
+        for subject in MATH500_SUBJECTS
+    }
+    column_extras = {level: 3 for level in MATH500_LEVELS}
+    extra_cells: set[tuple[str, int]] = set()
+
+    def assign_extras(row: int) -> bool:
+        if row == len(subjects):
+            return all(remaining == 0 for remaining in column_extras.values())
+        subject = subjects[row]
+        options = list(combinations(MATH500_LEVELS, row_extras[subject]))
+        rng.shuffle(options)
+        for levels in options:
+            if any(column_extras[level] == 0 for level in levels):
+                continue
+            for level in levels:
+                column_extras[level] -= 1
+                extra_cells.add((subject, level))
+            if assign_extras(row + 1):
+                return True
+            for level in levels:
+                column_extras[level] += 1
+                extra_cells.remove((subject, level))
+        return False
+
+    if not assign_extras(0):
+        raise RuntimeError("Could not construct balanced MATH-500 quotas")
+
+    selected_indices: list[int] = []
+    for key, indices in groups.items():
+        shuffled = list(indices)
+        rng.shuffle(shuffled)
+        selected_indices.extend(shuffled[: 2 if key in extra_cells else 1])
+
+    selected = dataset.select(sorted(selected_indices))
+    subject_counts = Counter(str(example["subject"]) for example in selected)
+    level_counts = Counter(int(example["level"]) for example in selected)
+    if sorted(subject_counts.values()) != [7, 7, 7, 7, 7, 7, 8]:
+        raise RuntimeError("Balanced MATH-500 subject quotas were not satisfied")
+    if set(level_counts.values()) != {10}:
+        raise RuntimeError("Balanced MATH-500 level quotas were not satisfied")
+    return selected
 
 
 def extract_boxed_answer(text: str) -> str | None:
@@ -35,13 +169,15 @@ def extract_boxed_answer(text: str) -> str | None:
 
 
 def grade_math_response(response: str, reference: Any) -> tuple[bool, str | None, str]:
-    from math_verify import parse, verify
-
     reference_text = str(reference)
     expected = extract_boxed_answer(reference_text) or reference_text.strip()
     prediction = extract_boxed_answer(response)
+    if prediction is None:
+        return False, None, expected
+    from math_verify import parse, verify
+
     gold_parsed = parse(f"${expected}$")
-    prediction_parsed = parse(response)
+    prediction_parsed = parse(f"${prediction}$")
     correct = bool(
         gold_parsed and prediction_parsed and verify(gold_parsed, prediction_parsed)
     )
@@ -74,8 +210,12 @@ def run_math_evaluation(
         settings.config_name,
         split=settings.split,
     )
-    limit = min(settings.max_examples, len(dataset))
-    dataset = dataset.select(range(limit))
+    if settings.balanced:
+        dataset = select_balanced_math500_subset(dataset, settings.seed)
+    else:
+        limit = min(settings.max_examples, len(dataset))
+        dataset = dataset.select(range(limit))
+    limit = len(dataset)
 
     records: list[dict[str, Any]] = []
     was_training = model.training
@@ -111,28 +251,49 @@ def run_math_evaluation(
                 generation_args["temperature"] = settings.temperature
                 generation_args["top_p"] = settings.top_p
                 generation_args["top_k"] = settings.top_k
+                if settings.min_p > 0:
+                    generation_args["min_p"] = settings.min_p
+                if settings.presence_penalty > 0:
+                    generation_args["logits_processor"] = [
+                        GeneratedTokenPresencePenaltyProcessor(
+                            settings.presence_penalty,
+                            inputs["input_ids"].shape[1],
+                        )
+                    ]
 
             with torch.inference_mode():
                 generated = model.generate(**inputs, **generation_args)
             prompt_width = inputs["input_ids"].shape[1]
             generated_only = generated[:, prompt_width:]
-            responses = tokenizer.batch_decode(generated_only, skip_special_tokens=True)
+            raw_responses = tokenizer.batch_decode(
+                generated_only,
+                skip_special_tokens=False,
+            )
 
-            for index, ((question, reference), response) in enumerate(
-                zip(questions_and_answers, responses, strict=True)
+            for index, ((question, reference), raw_response) in enumerate(
+                zip(questions_and_answers, raw_responses, strict=True)
             ):
+                reasoning, response = split_reasoning_and_final_response(
+                    raw_response,
+                    expect_reasoning=False,
+                    special_tokens=tuple(tokenizer.all_special_tokens),
+                )
                 correct, predicted, expected = grade_math_response(response, reference)
                 token_ids = generated_only[index]
                 reached_limit = token_ids.shape[0] >= settings.max_new_tokens
                 records.append(
                     {
                         "step": step,
+                        "grading_version": GRADING_VERSION,
                         "question": question,
+                        "subject": batch[index].get("subject"),
+                        "level": batch[index].get("level"),
                         "reference": reference,
                         "expected": expected,
                         "prediction": predicted,
                         "correct": correct,
                         "reached_token_limit": reached_limit,
+                        "reasoning": reasoning,
                         "response": response,
                     }
                 )

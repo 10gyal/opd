@@ -3,17 +3,20 @@
 This project uses `train_off_policy.py` for top-K soft-target cross-entropy on
 fixed MATH solutions.
 
-The student is `Qwen/Qwen3.5-2B-Base`. The off-policy teacher is
-`Qwen/Qwen3.5-9B-Base`. There are no student rollouts.
+The student is `Qwen/Qwen3.5-0.8B-Base`. The off-policy teacher is
+`Qwen/Qwen3.5-4B`. There are no student rollouts.
 
 ## Experiment
 
-- 512 level 3-5 examples from `DigitalLearningGmbH/MATH-lighteval`
+- 512 examples from all seven `EleutherAI/hendrycks_math` subjects
 - 2,048-token training limit
 - Effective batch size 32
 - 16 optimizer steps
 - Evaluation after steps 8 and 16
-- 128 held-out examples from `HuggingFaceH4/MATH-500`
+- 50 held-out examples from `HuggingFaceH4/MATH-500`
+- Exactly 10 evaluation examples from each difficulty level
+- Seven or eight evaluation examples from each subject
+- One or two examples from every subject-level group
 - 1,024 generated tokens per evaluation example
 - LoRA rank 32
 - Teacher top-20 probabilities for off-policy distillation
@@ -71,7 +74,7 @@ off-policy output directory.
 ## Outputs
 
 The final LoRA adapter is in
-`runs/qwen3.5-2b-base-math-off-policy/final_adapter`.
+`runs/qwen3.5-0.8b-base-math-off-policy/final_adapter`.
 
 Evaluation records are in the run's `evals` directory. Training and evaluation
 metrics are also sent to the W&B project in `config.yaml`.
@@ -84,8 +87,8 @@ python -m unittest discover -s tests -v
 
 ## Stand-alone evaluation
 
-Run `Qwen/Qwen3.5-0.8B-Base` on the 500-problem test split of the Hendrycks
-MATH benchmark with batched Transformers inference:
+Run `Qwen/Qwen3.5-0.8B-Base` on the balanced 50-problem MATH-500 subset with
+batched Transformers inference:
 
 ```bash
 python -m pip install -r requirements-eval.txt
@@ -93,11 +96,22 @@ python hendrycks_math.py
 ```
 
 The command uses greedy decoding, a 4,096-token generation limit, an 8,192-token
-total context limit, and the same
-`math-verify` grader as the training evaluations. It writes resumable records
-and a summary to `runs/qwen3.5-0.8b-base-hendrycks-math`. It also logs progress
-and the final result to the `opd` W&B project. Add `WANDB_API_KEY` to `.env`
-before the run. Use `--wandb-project`, `--wandb-entity`, and `--wandb-run-name`
-to change the W&B destination. Use `--wandb-mode offline` if the run has no
-W&B network connection. Thinking mode is disabled by default. Add
-`--enable-thinking` only for a model with a thinking-mode chat template.
+total context limit, and the same strict `math-verify` grader as the training
+evaluations. The grader uses only the final `\\boxed{}` answer. It does not grade
+text in the reasoning field.
+
+The command writes resumable records and a summary to
+`runs/qwen3.5-0.8b-base-math500-balanced50`. Each new record has separate
+`reasoning` and `response` fields. Records from the old grading method do not
+count as completed records and run again.
+
+The command also logs progress and the final result to the `opd` W&B project.
+Add `WANDB_API_KEY` to `.env` before the run. Use `--wandb-project`,
+`--wandb-entity`, and `--wandb-run-name` to change the W&B destination. Use
+`--wandb-mode offline` if the run has no W&B network connection.
+
+Thinking mode is disabled by default. Add `--enable-thinking` only for a model
+with a thinking-mode chat template. In thinking mode, the default sampling
+values are `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, and
+`presence_penalty=1.5`. The generation limit stays at 4,096 tokens. Command-line
+sampling options override these defaults.

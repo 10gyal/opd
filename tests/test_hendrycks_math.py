@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import argparse
 import unittest
 
 from hendrycks_math import (
     DEFAULT_MODEL,
+    DEFAULT_DATASET,
     DEFAULT_MAX_MODEL_LEN,
     DEFAULT_MAX_NEW_TOKENS,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_WANDB_RUN_NAME,
     _chat_prompt,
     _reference,
+    _resolve_sampling_parameters,
     _wandb_metrics,
 )
 
@@ -26,6 +29,7 @@ class FakeChatTokenizer:
 class HendrycksMathTest(unittest.TestCase):
     def test_uses_qwen_base_defaults(self) -> None:
         self.assertEqual(DEFAULT_MODEL, "Qwen/Qwen3.5-0.8B-Base")
+        self.assertEqual(DEFAULT_DATASET, "HuggingFaceH4/MATH-500")
         self.assertIn("qwen3.5-0.8b-base", DEFAULT_OUTPUT_DIR)
         self.assertIn("qwen3.5-0.8b-base", DEFAULT_WANDB_RUN_NAME)
         self.assertEqual(DEFAULT_MAX_NEW_TOKENS, 4096)
@@ -54,6 +58,21 @@ class HendrycksMathTest(unittest.TestCase):
         )
         self.assertEqual(metrics["eval/math/score"], 0.5)
         self.assertEqual(metrics["eval/math/examples"], 4)
+
+    def test_thinking_mode_uses_qwen_sampling_defaults(self) -> None:
+        args = argparse.Namespace(
+            enable_thinking=True,
+            temperature=None,
+            top_p=None,
+            top_k=None,
+            min_p=None,
+            presence_penalty=None,
+        )
+        _resolve_sampling_parameters(args)
+        self.assertEqual(args.temperature, 1.0)
+        self.assertEqual(args.top_p, 0.95)
+        self.assertEqual(args.top_k, 20)
+        self.assertEqual(args.presence_penalty, 1.5)
 
 
 if __name__ == "__main__":

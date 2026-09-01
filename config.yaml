@@ -1,12 +1,12 @@
 model:
-  name: Qwen/Qwen3.5-2B-Base
+  name: Qwen/Qwen3.5-0.8B-Base
   dtype: bfloat16
   attn_implementation: sdpa
   trust_remote_code: true
   use_kernels: true
 
 teacher:
-  name: Qwen/Qwen3.5-9B-Base
+  name: Qwen/Qwen3.5-4B
   dtype: bfloat16
   attn_implementation: sdpa
   trust_remote_code: true
@@ -32,13 +32,18 @@ lora:
     - out_proj
 
 dataset:
-  name: DigitalLearningGmbH/MATH-lighteval
-  config_name: default
+  name: EleutherAI/hendrycks_math
+  config_name: null
+  config_names:
+    - algebra
+    - counting_and_probability
+    - geometry
+    - intermediate_algebra
+    - number_theory
+    - prealgebra
+    - precalculus
   split: train
-  levels:
-    - 3
-    - 4
-    - 5
+  levels: []
   prompt_template: |-
     Problem:
     {problem}
@@ -76,11 +81,15 @@ eval:
   steps:
     - 8
     - 16
-  max_examples: 128
+  max_examples: 50
+  balanced: true
+  seed: 42
   max_new_tokens: 1024
   temperature: 0.0
   top_p: 1.0
   top_k: 0
+  min_p: 0.0
+  presence_penalty: 0.0
   batch_size: 1
   prompt_template: |-
     Problem:
@@ -90,10 +99,10 @@ eval:
     Solution:
 
 distillation:
-  output_dir: ./runs/qwen3.5-2b-base-math-off-policy
+  output_dir: ./runs/qwen3.5-0.8b-base-math-off-policy
   top_k: 20
   temperature: 1.0
-  wandb_run_name: qwen3.5-2b-base-math-off-policy
+  wandb_run_name: qwen3.5-0.8b-base-math-off-policy
 
 logging:
   wandb_project: opd
