@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import unittest
 
-from hendrycks_math import _chat_prompt, _reference, _wandb_metrics
+from hendrycks_math import (
+    DEFAULT_MODEL,
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_WANDB_RUN_NAME,
+    _chat_prompt,
+    _reference,
+    _wandb_metrics,
+)
 
 
 class FakeChatTokenizer:
@@ -15,6 +22,11 @@ class FakeChatTokenizer:
 
 
 class HendrycksMathTest(unittest.TestCase):
+    def test_uses_smollm2_defaults(self) -> None:
+        self.assertEqual(DEFAULT_MODEL, "HuggingFaceTB/SmolLM2-360M-Instruct")
+        self.assertIn("smollm2-360m-instruct", DEFAULT_OUTPUT_DIR)
+        self.assertIn("smollm2-360m-instruct", DEFAULT_WANDB_RUN_NAME)
+
     def test_disables_thinking_by_default(self) -> None:
         tokenizer = FakeChatTokenizer()
         _chat_prompt(tokenizer, "1 + 1")

@@ -84,7 +84,7 @@ python -m unittest discover -s tests -v
 
 ## Stand-alone evaluation
 
-Run the post-trained Qwen 3.5 0.8B model on the 500-problem test split of the
+Run `HuggingFaceTB/SmolLM2-360M-Instruct` on the 500-problem test split of the
 Hendrycks MATH benchmark with batched Transformers inference:
 
 ```bash
@@ -94,9 +94,9 @@ python hendrycks_math.py
 
 The command uses greedy decoding, a 1,024-token generation limit, and the same
 `math-verify` grader as the training evaluations. It writes resumable records
-and a summary to `runs/qwen3.5-0.8b-hendrycks-math`. It also logs progress and
-the final result to the `opd` W&B project. Add `WANDB_API_KEY` to `.env` before
-the run. Use `--wandb-project`, `--wandb-entity`, and `--wandb-run-name` to
-change the W&B destination. Use `--wandb-mode offline` if the run has no W&B
-network connection. Thinking mode is disabled by default. Add
-`--enable-thinking` only when a thinking-mode evaluation is required.
+and a summary to `runs/smollm2-360m-instruct-hendrycks-math`. It also logs
+progress and the final result to the `opd` W&B project. Add `WANDB_API_KEY` to
+`.env` before the run. Use `--wandb-project`, `--wandb-entity`, and
+`--wandb-run-name` to change the W&B destination. Use `--wandb-mode offline`
+if the run has no W&B network connection. Thinking mode is disabled by default.
+Add `--enable-thinking` only for a model with a thinking-mode chat template.

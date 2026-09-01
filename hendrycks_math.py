@@ -10,12 +10,20 @@ from typing import Any
 import torch
 from datasets import load_dataset
 from dotenv import load_dotenv
-from transformers import AutoModelForMultimodalLM, AutoTokenizer
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoModelForMultimodalLM,
+    AutoTokenizer,
+)
 
 from utils import grade_math_response
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
+DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-360M-Instruct"
+DEFAULT_OUTPUT_DIR = "runs/smollm2-360m-instruct-hendrycks-math"
+DEFAULT_WANDB_RUN_NAME = "smollm2-360m-instruct-hendrycks-math"
 DEFAULT_PROMPT = """Problem:
 {problem}
 
@@ -24,13 +32,13 @@ Solve the problem. Put the final answer in \\boxed{{}}."""
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a model on MATH.")
-    parser.add_argument("--model", default="Qwen/Qwen3.5-0.8B")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument(
         "--dataset", default="nlile/hendrycks-MATH-benchmark"
     )
     parser.add_argument("--dataset-config", default=None)
     parser.add_argument("--split", default="test")
-    parser.add_argument("--output-dir", default="runs/qwen3.5-0.8b-hendrycks-math")
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--max-examples", type=int, default=500)
     parser.add_argument("--max-new-tokens", type=int, default=1024)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -46,9 +54,7 @@ def parse_args() -> argparse.Namespace:
         "--wandb-project", default=os.environ.get("WANDB_PROJECT", "opd")
     )
     parser.add_argument("--wandb-entity", default=os.environ.get("WANDB_ENTITY"))
-    parser.add_argument(
-        "--wandb-run-name", default="qwen3.5-0.8b-hendrycks-math"
-    )
+    parser.add_argument("--wandb-run-name", default=DEFAULT_WANDB_RUN_NAME)
     parser.add_argument(
         "--wandb-mode",
         choices=("online", "offline", "disabled"),
@@ -71,6 +77,22 @@ def _chat_prompt(tokenizer: Any, problem: str, enable_thinking: bool = False) ->
         tokenize=False,
         add_generation_prompt=True,
         enable_thinking=enable_thinking,
+    )
+
+
+def _load_model(model_name: str) -> torch.nn.Module:
+    config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
+    architectures = config.architectures or []
+    model_loader = (
+        AutoModelForMultimodalLM
+        if any(name.endswith("ForConditionalGeneration") for name in architectures)
+        else AutoModelForCausalLM
+    )
+    return model_loader.from_pretrained(
+        model_name,
+        dtype=torch.bfloat16,
+        trust_remote_code=True,
+        attn_implementation="sdpa",
     )
 
 
@@ -188,12 +210,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if tokenizer.pad_token_id is None:
             tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
-        model = AutoModelForMultimodalLM.from_pretrained(
-            args.model,
-            dtype=torch.bfloat16,
-            trust_remote_code=True,
-            attn_implementation="sdpa",
-        )
+        model = _load_model(args.model)
         model.to("cuda")
         model.eval()
         model.config.use_cache = True
