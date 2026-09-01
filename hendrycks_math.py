@@ -24,6 +24,8 @@ PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL = "Qwen/Qwen3.5-0.8B-Base"
 DEFAULT_OUTPUT_DIR = "runs/qwen3.5-0.8b-base-hendrycks-math"
 DEFAULT_WANDB_RUN_NAME = "qwen3.5-0.8b-base-hendrycks-math"
+DEFAULT_MAX_NEW_TOKENS = 2048
+DEFAULT_MAX_MODEL_LEN = 8192
 DEFAULT_PROMPT = """Problem:
 {problem}
 
@@ -40,11 +42,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", default="test")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--max-examples", type=int, default=500)
-    parser.add_argument("--max-new-tokens", type=int, default=1024)
+    parser.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--max-model-len", type=int, default=4096)
+    parser.add_argument("--max-model-len", type=int, default=DEFAULT_MAX_MODEL_LEN)
     parser.add_argument(
         "--enable-thinking",
         action="store_true",

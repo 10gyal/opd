@@ -92,7 +92,8 @@ python -m pip install -r requirements-eval.txt
 python hendrycks_math.py
 ```
 
-The command uses greedy decoding, a 1,024-token generation limit, and the same
+The command uses greedy decoding, a 2,048-token generation limit, an 8,192-token
+total context limit, and the same
 `math-verify` grader as the training evaluations. It writes resumable records
 and a summary to `runs/qwen3.5-0.8b-base-hendrycks-math`. It also logs progress
 and the final result to the `opd` W&B project. Add `WANDB_API_KEY` to `.env`
