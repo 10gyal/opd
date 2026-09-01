@@ -98,4 +98,5 @@ and a summary to `runs/qwen3.5-0.8b-hendrycks-math`. It also logs progress and
 the final result to the `opd` W&B project. Add `WANDB_API_KEY` to `.env` before
 the run. Use `--wandb-project`, `--wandb-entity`, and `--wandb-run-name` to
 change the W&B destination. Use `--wandb-mode offline` if the run has no W&B
-network connection.
+network connection. Thinking mode is disabled by default. Add
+`--enable-thinking` only when a thinking-mode evaluation is required.

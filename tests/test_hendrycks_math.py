@@ -2,10 +2,24 @@ from __future__ import annotations
 
 import unittest
 
-from hendrycks_math import _reference, _wandb_metrics
+from hendrycks_math import _chat_prompt, _reference, _wandb_metrics
+
+
+class FakeChatTokenizer:
+    def __init__(self) -> None:
+        self.kwargs = None
+
+    def apply_chat_template(self, messages, **kwargs):
+        self.kwargs = kwargs
+        return messages[0]["content"]
 
 
 class HendrycksMathTest(unittest.TestCase):
+    def test_disables_thinking_by_default(self) -> None:
+        tokenizer = FakeChatTokenizer()
+        _chat_prompt(tokenizer, "1 + 1")
+        self.assertFalse(tokenizer.kwargs["enable_thinking"])
+
     def test_uses_answer_when_present(self) -> None:
         self.assertEqual(_reference({"answer": "2", "solution": "work"}), "2")
 

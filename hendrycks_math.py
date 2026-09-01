@@ -38,6 +38,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--max-model-len", type=int, default=4096)
     parser.add_argument(
+        "--enable-thinking",
+        action="store_true",
+        help="Enable the model's thinking mode. It is disabled by default.",
+    )
+    parser.add_argument(
         "--wandb-project", default=os.environ.get("WANDB_PROJECT", "opd")
     )
     parser.add_argument("--wandb-entity", default=os.environ.get("WANDB_ENTITY"))
@@ -59,12 +64,13 @@ def _reference(example: dict[str, Any]) -> Any:
     return example.get("solution", "")
 
 
-def _chat_prompt(tokenizer: Any, problem: str) -> str:
+def _chat_prompt(tokenizer: Any, problem: str, enable_thinking: bool = False) -> str:
     content = DEFAULT_PROMPT.format(problem=problem)
     return tokenizer.apply_chat_template(
         [{"role": "user", "content": content}],
         tokenize=False,
         add_generation_prompt=True,
+        enable_thinking=enable_thinking,
     )
 
 
@@ -202,7 +208,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         for offset in range(0, len(pending), args.batch_size):
             batch = pending[offset : offset + args.batch_size]
             prompts = [
-                _chat_prompt(tokenizer, str(example["problem"])) for example in batch
+                _chat_prompt(
+                    tokenizer,
+                    str(example["problem"]),
+                    enable_thinking=args.enable_thinking,
+                )
+                for example in batch
             ]
             max_input_length = args.max_model_len - args.max_new_tokens
             if max_input_length < 1:
