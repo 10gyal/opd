@@ -95,7 +95,7 @@ python -m pip install -r requirements-eval.txt
 python hendrycks_math.py
 ```
 
-The command uses greedy decoding, a 4,096-token generation limit, an 8,192-token
+The command uses greedy decoding, a 2,048-token generation limit, an 8,192-token
 total context limit, and the same strict `math-verify` grader as the training
 evaluations. The grader uses only the final `\\boxed{}` answer. It does not grade
 text in the reasoning field.
@@ -113,5 +113,5 @@ Add `WANDB_API_KEY` to `.env` before the run. Use `--wandb-project`,
 Thinking mode is disabled by default. Add `--enable-thinking` only for a model
 with a thinking-mode chat template. In thinking mode, the default sampling
 values are `temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, and
-`presence_penalty=1.5`. The generation limit stays at 4,096 tokens. Command-line
+`presence_penalty=1.5`. The generation limit stays at 2,048 tokens. Command-line
 sampling options override these defaults.
