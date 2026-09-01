@@ -24,7 +24,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 DEFAULT_MODEL = "Qwen/Qwen3.5-0.8B-Base"
 DEFAULT_OUTPUT_DIR = "runs/qwen3.5-0.8b-base-hendrycks-math"
 DEFAULT_WANDB_RUN_NAME = "qwen3.5-0.8b-base-hendrycks-math"
-DEFAULT_MAX_NEW_TOKENS = 2048
+DEFAULT_MAX_NEW_TOKENS = 4096
 DEFAULT_MAX_MODEL_LEN = 8192
 DEFAULT_PROMPT = """Problem:
 {problem}

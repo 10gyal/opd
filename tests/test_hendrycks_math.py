@@ -28,7 +28,7 @@ class HendrycksMathTest(unittest.TestCase):
         self.assertEqual(DEFAULT_MODEL, "Qwen/Qwen3.5-0.8B-Base")
         self.assertIn("qwen3.5-0.8b-base", DEFAULT_OUTPUT_DIR)
         self.assertIn("qwen3.5-0.8b-base", DEFAULT_WANDB_RUN_NAME)
-        self.assertEqual(DEFAULT_MAX_NEW_TOKENS, 2048)
+        self.assertEqual(DEFAULT_MAX_NEW_TOKENS, 4096)
         self.assertEqual(DEFAULT_MAX_MODEL_LEN, 8192)
 
     def test_disables_thinking_by_default(self) -> None:
