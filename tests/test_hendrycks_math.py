@@ -22,10 +22,10 @@ class FakeChatTokenizer:
 
 
 class HendrycksMathTest(unittest.TestCase):
-    def test_uses_smollm2_defaults(self) -> None:
-        self.assertEqual(DEFAULT_MODEL, "HuggingFaceTB/SmolLM2-360M-Instruct")
-        self.assertIn("smollm2-360m-instruct", DEFAULT_OUTPUT_DIR)
-        self.assertIn("smollm2-360m-instruct", DEFAULT_WANDB_RUN_NAME)
+    def test_uses_qwen_base_defaults(self) -> None:
+        self.assertEqual(DEFAULT_MODEL, "Qwen/Qwen3.5-0.8B-Base")
+        self.assertIn("qwen3.5-0.8b-base", DEFAULT_OUTPUT_DIR)
+        self.assertIn("qwen3.5-0.8b-base", DEFAULT_WANDB_RUN_NAME)
 
     def test_disables_thinking_by_default(self) -> None:
         tokenizer = FakeChatTokenizer()

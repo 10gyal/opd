@@ -21,9 +21,9 @@ from utils import grade_math_response
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-360M-Instruct"
-DEFAULT_OUTPUT_DIR = "runs/smollm2-360m-instruct-hendrycks-math"
-DEFAULT_WANDB_RUN_NAME = "smollm2-360m-instruct-hendrycks-math"
+DEFAULT_MODEL = "Qwen/Qwen3.5-0.8B-Base"
+DEFAULT_OUTPUT_DIR = "runs/qwen3.5-0.8b-base-hendrycks-math"
+DEFAULT_WANDB_RUN_NAME = "qwen3.5-0.8b-base-hendrycks-math"
 DEFAULT_PROMPT = """Problem:
 {problem}
 
