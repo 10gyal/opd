@@ -17,6 +17,7 @@ from transformers import (
     AutoTokenizer,
 )
 
+from data import render_problem_prompt
 from utils import (
     GRADING_VERSION,
     GeneratedTokenPresencePenaltyProcessor,
@@ -36,7 +37,7 @@ DEFAULT_MAX_MODEL_LEN = 8192
 DEFAULT_PROMPT = """Problem:
 {problem}
 
-Solve the problem. Put the final answer in \\boxed{{}}."""
+Solve the problem. Put the final answer in \\boxed{}."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -88,7 +89,7 @@ def _reference(example: dict[str, Any]) -> Any:
 
 
 def _chat_prompt(tokenizer: Any, problem: str, enable_thinking: bool = False) -> str:
-    content = DEFAULT_PROMPT.format(problem=problem)
+    content = render_problem_prompt(DEFAULT_PROMPT, problem)
     return tokenizer.apply_chat_template(
         [{"role": "user", "content": content}],
         tokenize=False,

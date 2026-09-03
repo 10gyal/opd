@@ -37,8 +37,9 @@ class HendrycksMathTest(unittest.TestCase):
 
     def test_disables_thinking_by_default(self) -> None:
         tokenizer = FakeChatTokenizer()
-        _chat_prompt(tokenizer, "1 + 1")
+        prompt = _chat_prompt(tokenizer, "1 + 1")
         self.assertFalse(tokenizer.kwargs["enable_thinking"])
+        self.assertIn(r"\boxed{}", prompt)
 
     def test_uses_answer_when_present(self) -> None:
         self.assertEqual(_reference({"answer": "2", "solution": "work"}), "2")

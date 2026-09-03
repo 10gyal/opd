@@ -12,6 +12,7 @@ from datasets import load_dataset
 from transformers import LogitsProcessor, TrainerCallback
 
 from config import EvalSettings
+from data import render_problem_prompt
 
 MATH500_SUBJECTS = (
     "Algebra",
@@ -233,7 +234,7 @@ def run_math_evaluation(
             )
             questions_and_answers = [_question_and_answer(example) for example in batch]
             prompt_texts = [
-                settings.prompt_template.format(problem=question)
+                render_problem_prompt(settings.prompt_template, question)
                 for question, _ in questions_and_answers
             ]
             inputs = tokenizer(prompt_texts, return_tensors="pt", padding=True)

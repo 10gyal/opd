@@ -7,6 +7,13 @@ from datasets import IterableDataset, interleave_datasets, load_dataset
 from config import DatasetSettings
 
 
+def render_problem_prompt(prompt_template: str, problem: str) -> str:
+    """Replace only the problem marker and preserve all mathematical braces."""
+    if "{problem}" not in prompt_template:
+        raise ValueError("The prompt template must contain {problem}")
+    return prompt_template.replace("{problem}", problem)
+
+
 def format_math_example(
     example: dict[str, Any],
     prompt_template: str = "Problem:\n{problem}\n\nSolution:\n",
@@ -16,7 +23,7 @@ def format_math_example(
     if not isinstance(problem, str) or not isinstance(solution, str):
         raise TypeError("Each example must contain text problem and solution fields")
     return {
-        "prompt": prompt_template.format(problem=problem),
+        "prompt": render_problem_prompt(prompt_template, problem),
         "solution": solution,
     }
 

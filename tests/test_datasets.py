@@ -5,6 +5,7 @@ import unittest
 from data import (
     _is_selected_level,
     format_math_example,
+    render_problem_prompt,
     tokenize_math_example,
 )
 
@@ -24,6 +25,13 @@ class DatasetTest(unittest.TestCase):
         )
         self.assertEqual(result["prompt"], "Problem:\nWhat is 1 + 1?\n\nSolution:\n")
         self.assertEqual(result["solution"], r"\boxed{2}")
+
+    def test_prompt_renderer_preserves_math_braces(self) -> None:
+        rendered = render_problem_prompt(
+            r"Problem: {problem} Answer in \boxed{}.",
+            "1 + 1",
+        )
+        self.assertEqual(rendered, r"Problem: 1 + 1 Answer in \boxed{}.")
 
     def test_tokenization_masks_prompt_tokens(self) -> None:
         result = tokenize_math_example(
