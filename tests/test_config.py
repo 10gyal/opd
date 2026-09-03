@@ -13,7 +13,7 @@ class ConfigTest(unittest.TestCase):
         settings = load_settings(PROJECT_DIR / "config.yaml")
         self.assertEqual(settings.model.name, "Qwen/Qwen3.5-0.8B-Base")
         self.assertEqual(settings.teacher.name, "Qwen/Qwen3.5-4B")
-        self.assertEqual(settings.teacher.quantization, "int8")
+        self.assertIsNone(settings.teacher.quantization)
         self.assertEqual(settings.teacher_targets.batch_size, 4)
         self.assertEqual(settings.teacher_targets.shard_size, 32)
         self.assertEqual(settings.teacher_targets.storage_dtype, "float16")

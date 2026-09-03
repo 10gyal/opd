@@ -189,7 +189,9 @@ def run(settings: Settings, teacher_targets_dir: Path) -> None:
         max_steps=settings.training.max_steps,
         learning_rate=settings.training.learning_rate,
         lr_scheduler_type=settings.training.lr_scheduler_type,
-        warmup_ratio=settings.training.warmup_ratio,
+        # Transformers 5 removed warmup_ratio. A float passed to warmup_steps
+        # keeps the same ratio-based behavior.
+        warmup_steps=settings.training.warmup_ratio,
         weight_decay=settings.training.weight_decay,
         max_grad_norm=settings.training.max_grad_norm,
         logging_strategy="steps",

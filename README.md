@@ -25,11 +25,10 @@ The student is `Qwen/Qwen3.5-0.8B-Base`. The off-policy teacher is
 - LoRA rank 32
 - Teacher top-20 probabilities for off-policy distillation
 
-The teacher uses 8-bit weight loading during target precomputation. This reduces
-GPU memory use on one 48 GB A40. Set `teacher.quantization: null` for bfloat16
-teacher weights. A bfloat16 teacher gives more exact soft targets but uses
-approximately twice the teacher weight memory. The student training stage does
-not load the teacher.
+The teacher uses bfloat16 weights without quantization during target
+precomputation. This gives more exact soft targets. Set
+`teacher.quantization: int8` and `teacher.dtype: float16` for a lower-memory test.
+The student training stage does not load the teacher.
 
 ## Loss
 
@@ -55,7 +54,7 @@ cache does not match `config.yaml`.
 The default cache directory is:
 
 ```text
-teacher_targets/qwen3.5-4b-hendrycks-math-top20
+teacher_targets/qwen3.5-4b-bf16-hendrycks-math-top20
 ```
 
 The repository ignores `teacher_targets/`. Git does not upload this data.
@@ -106,11 +105,11 @@ both commands:
 ```bash
 python precompute_teacher_targets.py \
   --config config.yaml \
-  --output-dir /workspace/opd-cache/qwen3.5-4b-hendrycks-math-top20
+  --output-dir /workspace/opd-cache/qwen3.5-4b-bf16-hendrycks-math-top20
 
 python train_off_policy.py \
   --config config.yaml \
-  --teacher-targets /workspace/opd-cache/qwen3.5-4b-hendrycks-math-top20
+  --teacher-targets /workspace/opd-cache/qwen3.5-4b-bf16-hendrycks-math-top20
 ```
 
 Use the actual mount path for your RunPod volume. The Pod storage page shows

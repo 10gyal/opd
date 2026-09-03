@@ -11,10 +11,10 @@ teacher:
   attn_implementation: sdpa
   trust_remote_code: true
   use_kernels: false
-  quantization: int8
+  quantization: null
 
 teacher_targets:
-  output_dir: ./teacher_targets/qwen3.5-4b-hendrycks-math-top20
+  output_dir: ./teacher_targets/qwen3.5-4b-bf16-hendrycks-math-top20
   batch_size: 4
   shard_size: 32
   storage_dtype: float16
