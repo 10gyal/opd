@@ -3,7 +3,7 @@ model:
   dtype: bfloat16
   attn_implementation: sdpa
   trust_remote_code: true
-  use_kernels: true
+  use_kernels: false
 
 teacher:
   name: Qwen/Qwen3.5-4B
