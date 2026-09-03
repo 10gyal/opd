@@ -1,7 +1,11 @@
 # Off-policy distillation on MATH
 
-This project uses `train_off_policy.py` for top-K soft-target cross-entropy on
-fixed MATH solutions.
+This project uses two separate stages for top-K soft-target cross-entropy on
+fixed MATH solutions:
+
+1. `precompute_teacher_targets.py` runs the teacher and saves its top-K token
+   log probabilities.
+2. `train_off_policy.py` loads the saved targets and trains only the student.
 
 The student is `Qwen/Qwen3.5-0.8B-Base`. The off-policy teacher is
 `Qwen/Qwen3.5-4B`. There are no student rollouts.
@@ -21,10 +25,11 @@ The student is `Qwen/Qwen3.5-0.8B-Base`. The off-policy teacher is
 - LoRA rank 32
 - Teacher top-20 probabilities for off-policy distillation
 
-The teacher uses 8-bit weight loading by default. This reduces GPU memory use on
-one 48 GB A40. Set `teacher.quantization: null` for bfloat16 teacher weights. A
-bfloat16 teacher gives more exact soft targets but uses approximately twice the
-teacher weight memory.
+The teacher uses 8-bit weight loading during target precomputation. This reduces
+GPU memory use on one 48 GB A40. Set `teacher.quantization: null` for bfloat16
+teacher weights. A bfloat16 teacher gives more exact soft targets but uses
+approximately twice the teacher weight memory. The student training stage does
+not load the teacher.
 
 ## Loss
 
@@ -33,8 +38,28 @@ tokens. Their probabilities are normalized over the selected set. The student
 minimizes cross-entropy against these soft targets. Prompt and padding tokens do
 not add loss.
 
-The teacher and student must have the same token-to-ID mapping. The trainer
-checks this condition before training.
+The teacher and student must have the same token-to-ID mapping. The precompute
+stage checks this condition. The training stage checks the saved tokenizer hash
+before it loads the student model.
+
+## Teacher-target cache
+
+The cache uses checksummed `safetensors` shards. It stores the tokenized fixed
+sequences and the teacher top-20 token IDs and log probabilities for completion
+positions. It does not store full-vocabulary logits.
+
+The `metadata.json` file identifies the teacher, tokenizer, dataset selection,
+prompt template, maximum length, and top-K value. Student training stops if the
+cache does not match `config.yaml`.
+
+The default cache directory is:
+
+```text
+teacher_targets/qwen3.5-4b-hendrycks-math-top20
+```
+
+The repository ignores `teacher_targets/`. Git does not upload this data.
+Precomputation continues from the last complete shard after an interruption.
 
 ## Run on RunPod
 
@@ -56,17 +81,40 @@ WANDB_API_KEY=your_key
 HF_TOKEN=your_optional_hugging_face_token
 ```
 
-Check the configuration without model or dataset downloads:
+Check both commands without model or dataset downloads:
 
 ```bash
+python precompute_teacher_targets.py --config config.yaml --check-config
 python train_off_policy.py --config config.yaml --check-config
 ```
 
-Run off-policy distillation:
+First, precompute and save the teacher targets:
+
+```bash
+python precompute_teacher_targets.py --config config.yaml
+```
+
+Then train the student from the saved targets:
 
 ```bash
 python train_off_policy.py --config config.yaml
 ```
+
+To keep the cache on a RunPod network volume, use the same absolute path for
+both commands:
+
+```bash
+python precompute_teacher_targets.py \
+  --config config.yaml \
+  --output-dir /workspace/opd-cache/qwen3.5-4b-hendrycks-math-top20
+
+python train_off_policy.py \
+  --config config.yaml \
+  --teacher-targets /workspace/opd-cache/qwen3.5-4b-hendrycks-math-top20
+```
+
+Use the actual mount path for your RunPod volume. The Pod storage page shows
+this path.
 
 `resume_from_checkpoint: auto` resumes from the newest checkpoint in the
 off-policy output directory.

@@ -27,6 +27,14 @@ class TeacherSettings:
 
 
 @dataclass(frozen=True)
+class TeacherTargetSettings:
+    output_dir: str
+    batch_size: int
+    shard_size: int
+    storage_dtype: str
+
+
+@dataclass(frozen=True)
 class LoraSettings:
     rank: int
     alpha: int
@@ -114,6 +122,7 @@ class LoggingSettings:
 class Settings:
     model: ModelSettings
     teacher: TeacherSettings
+    teacher_targets: TeacherTargetSettings
     lora: LoraSettings
     dataset: DatasetSettings
     training: TrainingSettings
@@ -141,6 +150,12 @@ def validate_settings(settings: Settings) -> None:
         raise ValueError("teacher.dtype must be bfloat16, float16, or float32")
     if settings.teacher.quantization not in {None, "int8"}:
         raise ValueError("teacher.quantization must be int8 or null")
+    _positive(settings.teacher_targets.batch_size, "teacher_targets.batch_size")
+    _positive(settings.teacher_targets.shard_size, "teacher_targets.shard_size")
+    if settings.teacher_targets.storage_dtype not in {"float16", "bfloat16"}:
+        raise ValueError(
+            "teacher_targets.storage_dtype must be float16 or bfloat16"
+        )
 
     _positive(settings.lora.rank, "lora.rank")
     _positive(settings.lora.alpha, "lora.alpha")
@@ -223,6 +238,7 @@ def load_settings(path: str | Path) -> Settings:
 
     model = _section(raw, "model")
     teacher = _section(raw, "teacher")
+    teacher_targets = _section(raw, "teacher_targets")
     lora = _section(raw, "lora")
     dataset = _section(raw, "dataset")
     training = _section(raw, "training")
@@ -254,6 +270,14 @@ def load_settings(path: str | Path) -> Settings:
                 str(teacher["quantization"])
                 if teacher.get("quantization") is not None
                 else None
+            ),
+        ),
+        teacher_targets=TeacherTargetSettings(
+            output_dir=str(teacher_targets["output_dir"]),
+            batch_size=int(teacher_targets.get("batch_size", 1)),
+            shard_size=int(teacher_targets.get("shard_size", 32)),
+            storage_dtype=str(
+                teacher_targets.get("storage_dtype", "float16")
             ),
         ),
         lora=LoraSettings(

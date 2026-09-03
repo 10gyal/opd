@@ -5,7 +5,7 @@ import unittest
 import torch
 import torch.nn.functional as F
 
-from distillation import topk_soft_cross_entropy
+from distillation import cached_topk_soft_cross_entropy, topk_soft_cross_entropy
 
 
 class DistillationLossTest(unittest.TestCase):
@@ -29,6 +29,37 @@ class DistillationLossTest(unittest.TestCase):
         labels = torch.tensor([[-100, -100, 1]])
         loss = topk_soft_cross_entropy(student, teacher, labels, top_k=2)
         torch.testing.assert_close(loss, torch.log(torch.tensor(2.0)))
+
+    def test_cached_targets_match_online_teacher_loss(self) -> None:
+        student = torch.tensor(
+            [[[0.0, 0.0, 0.0], [1.0, 2.0, 3.0], [2.0, 0.0, 1.0]]]
+        )
+        teacher = torch.tensor(
+            [[[0.0, 4.0, 1.0], [5.0, 0.0, 1.0], [0.0, 0.0, 0.0]]]
+        )
+        labels = torch.tensor([[-100, 2, 0]])
+        online_loss = topk_soft_cross_entropy(
+            student, teacher, labels, top_k=2, temperature=0.7
+        )
+
+        topk_logits, topk_ids = torch.topk(teacher[:, :-1], k=2, dim=-1)
+        log_normalizer = torch.logsumexp(
+            teacher[:, :-1].float(), dim=-1, keepdim=True
+        )
+        topk_logprobs = topk_logits.float() - log_normalizer
+        aligned_ids = torch.zeros((1, 3, 2), dtype=torch.long)
+        aligned_logprobs = torch.zeros((1, 3, 2))
+        aligned_ids[:, 1:] = topk_ids
+        aligned_logprobs[:, 1:] = topk_logprobs
+
+        cached_loss = cached_topk_soft_cross_entropy(
+            student,
+            aligned_ids,
+            aligned_logprobs,
+            labels,
+            temperature=0.7,
+        )
+        torch.testing.assert_close(cached_loss, online_loss)
 
 
 if __name__ == "__main__":
