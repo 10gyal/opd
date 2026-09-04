@@ -63,9 +63,10 @@ dataset:
 training:
   max_length: 2048
   per_device_train_batch_size: 2
-  # 20 prompts per step times 375 steps gives 7,500 training prompts.
+  # 20 prompts per step times 1,500 steps gives 30,000 training prompts.
+  # This makes four passes over the fixed cache of 7,500 examples.
   gradient_accumulation_steps: 10
-  max_steps: 375
+  max_steps: 1500
   learning_rate: 0.0002
   lr_scheduler_type: linear
   warmup_ratio: 0.0
@@ -93,11 +94,43 @@ eval:
     - 250
     - 300
     - 350
-    - 375
+    - 400
+    - 450
+    - 500
+    - 550
+    - 600
+    - 650
+    - 700
+    - 750
+    - 800
+    - 850
+    - 900
+    - 950
+    - 1000
+    - 1050
+    - 1100
+    - 1150
+    - 1200
+    - 1250
+    - 1300
+    - 1350
+    - 1400
+    - 1450
+    - 1500
+  # Full MATH-500 evaluation every 5,000 training prompts.
+  full_steps:
+    - 250
+    - 500
+    - 750
+    - 1000
+    - 1250
+    - 1500
   max_examples: 50
+  full_max_examples: 500
   balanced: true
   seed: 42
-  max_new_tokens: 1024
+  # This is the total prompt-and-generation limit, as in training.
+  max_length: 2048
   temperature: 0.0
   top_p: 1.0
   top_k: 0
@@ -112,10 +145,10 @@ eval:
     Solution:
 
 distillation:
-  output_dir: ./runs/qwen3.5-0.8b-base-math-off-policy-7500-batch2
+  output_dir: ./runs/qwen3.5-0.8b-base-math-off-policy-30k-batch2
   top_k: 20
   temperature: 1.0
-  wandb_run_name: qwen3.5-0.8b-base-math-off-policy-7500-batch2
+  wandb_run_name: qwen3.5-0.8b-base-math-off-policy-30k-batch2
 
 logging:
   wandb_project: opd

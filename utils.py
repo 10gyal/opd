@@ -197,6 +197,68 @@ def _model_device(model: torch.nn.Module) -> torch.device:
     return next(model.parameters()).device
 
 
+def _evaluation_id(example: dict[str, Any], index: int) -> str:
+    unique_id = example.get("unique_id")
+    return str(unique_id) if unique_id is not None else f"row-{index}"
+
+
+def _write_records_atomic(path: Path, records: list[dict[str, Any]]) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", encoding="utf-8") as file:
+        for record in records:
+            file.write(json.dumps(record, ensure_ascii=False) + "\n")
+    temporary.replace(path)
+
+
+def _load_evaluation_records(
+    path: Path,
+    *,
+    evaluation_name: str,
+    step: int,
+    valid_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    if not path.is_file():
+        return {}
+    records: dict[str, dict[str, Any]] = {}
+    with path.open(encoding="utf-8") as file:
+        for line_number, line in enumerate(file, start=1):
+            record = json.loads(line)
+            evaluation_id = str(record.get("evaluation_id", ""))
+            if (
+                record.get("grading_version") != GRADING_VERSION
+                or record.get("evaluation_name") != evaluation_name
+                or int(record.get("step", -1)) != step
+                or evaluation_id not in valid_ids
+            ):
+                raise ValueError(
+                    f"Evaluation record does not match this run: {path}:{line_number}"
+                )
+            if evaluation_id in records:
+                raise ValueError(
+                    f"Evaluation record is duplicated: {path}:{line_number}"
+                )
+            records[evaluation_id] = record
+    return records
+
+
+def _reached_generation_limit(
+    token_ids: torch.Tensor,
+    *,
+    eos_token_id: int | tuple[int, ...] | list[int] | None,
+    max_new_tokens: int,
+) -> bool:
+    if token_ids.shape[0] < max_new_tokens:
+        return False
+    if eos_token_id is None:
+        return True
+    eos_ids = (
+        {int(eos_token_id)}
+        if isinstance(eos_token_id, int)
+        else {int(token_id) for token_id in eos_token_id}
+    )
+    return not any(int(token_id) in eos_ids for token_id in token_ids)
+
+
 def run_math_evaluation(
     model: torch.nn.Module,
     tokenizer: Any,
@@ -205,20 +267,41 @@ def run_math_evaluation(
     step: int,
     seed: int,
     prompts_seen: int,
+    evaluation_name: str,
+    max_examples: int,
+    balanced: bool,
 ) -> dict[str, float]:
     dataset = load_dataset(
         settings.dataset_name,
         settings.config_name,
         split=settings.split,
     )
-    if settings.balanced:
+    if balanced:
         dataset = select_balanced_math500_subset(dataset, settings.seed)
     else:
-        limit = min(settings.max_examples, len(dataset))
+        limit = min(max_examples, len(dataset))
         dataset = dataset.select(range(limit))
     limit = len(dataset)
 
-    records: list[dict[str, Any]] = []
+    evaluation_ids = [
+        _evaluation_id(example, index) for index, example in enumerate(dataset)
+    ]
+    if len(set(evaluation_ids)) != limit:
+        raise ValueError("Evaluation examples do not have unique IDs")
+    eval_dir = output_dir / "evals"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+    result_path = eval_dir / f"math_{evaluation_name}_step_{step:06d}.jsonl"
+    records_by_id = _load_evaluation_records(
+        result_path,
+        evaluation_name=evaluation_name,
+        step=step,
+        valid_ids=set(evaluation_ids),
+    )
+    pending_indices = [
+        index
+        for index, evaluation_id in enumerate(evaluation_ids)
+        if evaluation_id not in records_by_id
+    ]
     was_training = model.training
     original_padding_side = tokenizer.padding_side
     tokenizer.padding_side = "left"
@@ -228,21 +311,32 @@ def run_math_evaluation(
         torch.cuda.manual_seed_all(seed + step)
 
     try:
-        for offset in range(0, limit, settings.batch_size):
-            batch = dataset.select(
-                range(offset, min(offset + settings.batch_size, limit))
-            )
+        for offset in range(0, len(pending_indices), settings.batch_size):
+            batch_indices = pending_indices[offset : offset + settings.batch_size]
+            batch = dataset.select(batch_indices)
             questions_and_answers = [_question_and_answer(example) for example in batch]
             prompt_texts = [
                 render_problem_prompt(settings.prompt_template, question)
                 for question, _ in questions_and_answers
             ]
-            inputs = tokenizer(prompt_texts, return_tensors="pt", padding=True)
+            inputs = tokenizer(
+                prompt_texts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=settings.max_length - 1,
+            )
             inputs = {
                 name: value.to(_model_device(model)) for name, value in inputs.items()
             }
+            prompt_width = inputs["input_ids"].shape[1]
+            max_new_tokens = settings.max_length - prompt_width
+            if max_new_tokens < 1:
+                raise ValueError(
+                    "The evaluation prompt leaves no space for generated tokens"
+                )
             generation_args: dict[str, Any] = {
-                "max_new_tokens": settings.max_new_tokens,
+                "max_new_tokens": max_new_tokens,
                 "do_sample": settings.temperature > 0,
                 "pad_token_id": tokenizer.pad_token_id,
                 "eos_token_id": tokenizer.eos_token_id,
@@ -264,7 +358,6 @@ def run_math_evaluation(
 
             with torch.inference_mode():
                 generated = model.generate(**inputs, **generation_args)
-            prompt_width = inputs["input_ids"].shape[1]
             generated_only = generated[:, prompt_width:]
             raw_responses = tokenizer.batch_decode(
                 generated_only,
@@ -281,45 +374,51 @@ def run_math_evaluation(
                 )
                 correct, predicted, expected = grade_math_response(response, reference)
                 token_ids = generated_only[index]
-                reached_limit = token_ids.shape[0] >= settings.max_new_tokens
-                records.append(
-                    {
-                        "step": step,
-                        "grading_version": GRADING_VERSION,
-                        "question": question,
-                        "subject": batch[index].get("subject"),
-                        "level": batch[index].get("level"),
-                        "reference": reference,
-                        "expected": expected,
-                        "prediction": predicted,
-                        "correct": correct,
-                        "reached_token_limit": reached_limit,
-                        "reasoning": reasoning,
-                        "response": response,
-                    }
+                reached_limit = _reached_generation_limit(
+                    token_ids,
+                    eos_token_id=tokenizer.eos_token_id,
+                    max_new_tokens=max_new_tokens,
                 )
+                evaluation_id = evaluation_ids[batch_indices[index]]
+                records_by_id[evaluation_id] = {
+                    "step": step,
+                    "grading_version": GRADING_VERSION,
+                    "evaluation_name": evaluation_name,
+                    "evaluation_id": evaluation_id,
+                    "question": question,
+                    "subject": batch[index].get("subject"),
+                    "level": batch[index].get("level"),
+                    "reference": reference,
+                    "expected": expected,
+                    "prediction": predicted,
+                    "correct": correct,
+                    "reached_token_limit": reached_limit,
+                    "reasoning": reasoning,
+                    "response": response,
+                }
+            ordered_records = [
+                records_by_id[evaluation_id]
+                for evaluation_id in evaluation_ids
+                if evaluation_id in records_by_id
+            ]
+            _write_records_atomic(result_path, ordered_records)
     finally:
         tokenizer.padding_side = original_padding_side
         if was_training:
             model.train()
 
-    eval_dir = output_dir / "evals"
-    eval_dir.mkdir(parents=True, exist_ok=True)
-    result_path = eval_dir / f"math_step_{step:06d}.jsonl"
-    with result_path.open("w", encoding="utf-8") as file:
-        for record in records:
-            file.write(json.dumps(record, ensure_ascii=False) + "\n")
-
+    records = [records_by_id[evaluation_id] for evaluation_id in evaluation_ids]
     correct_count = sum(int(record["correct"]) for record in records)
     unparsed_count = sum(record["prediction"] is None for record in records)
     limit_count = sum(int(record["reached_token_limit"]) for record in records)
     total = len(records)
+    metric_prefix = f"eval/math_{evaluation_name}"
     return {
-        "eval/math/score": correct_count / total if total else 0.0,
-        "eval/math/correct": float(correct_count),
-        "eval/math/examples": float(total),
-        "eval/math/unparsed": float(unparsed_count),
-        "eval/math/reached_token_limit": float(limit_count),
+        f"{metric_prefix}/score": correct_count / total if total else 0.0,
+        f"{metric_prefix}/correct": float(correct_count),
+        f"{metric_prefix}/examples": float(total),
+        f"{metric_prefix}/unparsed": float(unparsed_count),
+        f"{metric_prefix}/reached_token_limit": float(limit_count),
         "eval/prompts_seen": float(prompts_seen),
     }
 
@@ -336,7 +435,7 @@ class MathCallback(TrainerCallback):
         self.output_dir = output_dir
         self.seed = seed
         self.effective_batch_size = effective_batch_size
-        self.completed_steps: set[int] = set()
+        self.completed_runs: set[tuple[str, int]] = set()
         self.trainer: Any = None
 
     def bind(self, trainer: Any) -> None:
@@ -344,28 +443,47 @@ class MathCallback(TrainerCallback):
 
     def _evaluate(self, state: Any) -> None:
         step = int(state.global_step)
-        if (
-            self.trainer is None
-            or step in self.completed_steps
-            or step not in self.settings.steps
-            or not state.is_world_process_zero
-        ):
+        if self.trainer is None or not state.is_world_process_zero:
             return
-        metrics = run_math_evaluation(
-            model=self.trainer.model,
-            tokenizer=self.trainer.processing_class,
-            settings=self.settings,
-            output_dir=self.output_dir,
-            step=step,
-            seed=self.seed,
-            prompts_seen=step * self.effective_batch_size,
-        )
-        self.completed_steps.add(step)
-        self.trainer.log(metrics)
+        evaluations: list[tuple[str, int, bool]] = []
+        if step in self.settings.steps:
+            evaluations.append(
+                ("subset", self.settings.max_examples, self.settings.balanced)
+            )
+        if step in self.settings.full_steps:
+            evaluations.append(("full", self.settings.full_max_examples, False))
+        for evaluation_name, max_examples, balanced in evaluations:
+            run_key = (evaluation_name, step)
+            if run_key in self.completed_runs:
+                continue
+            metrics = run_math_evaluation(
+                model=self.trainer.model,
+                tokenizer=self.trainer.processing_class,
+                settings=self.settings,
+                output_dir=self.output_dir,
+                step=step,
+                seed=self.seed,
+                prompts_seen=step * self.effective_batch_size,
+                evaluation_name=evaluation_name,
+                max_examples=max_examples,
+                balanced=balanced,
+            )
+            self.completed_runs.add(run_key)
+            self.trainer.log(metrics)
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def on_step_end(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
+    def on_train_begin(
+        self,
+        args: Any,
+        state: Any,
+        control: Any,
+        **kwargs: Any,
+    ) -> Any:
+        self._evaluate(state)
+        return control
+
+    def on_save(self, args: Any, state: Any, control: Any, **kwargs: Any) -> Any:
         self._evaluate(state)
         return control
 

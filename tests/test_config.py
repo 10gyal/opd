@@ -23,14 +23,21 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(settings.training.per_device_train_batch_size, 2)
         self.assertEqual(settings.training.gradient_accumulation_steps, 10)
         self.assertEqual(settings.training.effective_batch_size, 20)
-        self.assertEqual(settings.training.expected_examples, 7500)
-        self.assertEqual(settings.training.max_steps, 375)
+        self.assertEqual(settings.training.max_length, 2048)
+        self.assertEqual(settings.training.expected_examples, 30000)
+        self.assertEqual(settings.training.max_steps, 1500)
         self.assertEqual(
             settings.eval.steps,
-            (50, 100, 150, 200, 250, 300, 350, 375),
+            tuple(range(50, 1501, 50)),
         )
-        self.assertEqual(settings.eval.max_new_tokens, 1024)
+        self.assertEqual(
+            settings.eval.full_steps,
+            (250, 500, 750, 1000, 1250, 1500),
+        )
+        self.assertEqual(settings.eval.max_length, 2048)
+        self.assertEqual(settings.eval.max_length, settings.training.max_length)
         self.assertEqual(settings.eval.max_examples, 50)
+        self.assertEqual(settings.eval.full_max_examples, 500)
         self.assertTrue(settings.eval.balanced)
         self.assertEqual(settings.eval.min_p, 0.0)
         self.assertEqual(settings.eval.presence_penalty, 0.0)

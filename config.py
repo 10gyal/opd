@@ -91,10 +91,12 @@ class EvalSettings:
     config_name: str | None
     split: str
     steps: tuple[int, ...]
+    full_steps: tuple[int, ...]
     max_examples: int
+    full_max_examples: int
     balanced: bool
     seed: int
-    max_new_tokens: int
+    max_length: int
     temperature: float
     top_p: float
     top_k: int
@@ -202,10 +204,19 @@ def validate_settings(settings: Settings) -> None:
 
     if settings.eval.enabled:
         _positive(settings.eval.max_examples, "eval.max_examples")
-        _positive(settings.eval.max_new_tokens, "eval.max_new_tokens")
+        _positive(settings.eval.full_max_examples, "eval.full_max_examples")
+        _positive(settings.eval.max_length, "eval.max_length")
         _positive(settings.eval.batch_size, "eval.batch_size")
+        if settings.eval.max_length != settings.training.max_length:
+            raise ValueError(
+                "eval.max_length must equal training.max_length"
+            )
         if settings.eval.balanced and settings.eval.max_examples != 50:
             raise ValueError("A balanced MATH-500 evaluation must use 50 examples")
+        if settings.eval.full_max_examples < settings.eval.max_examples:
+            raise ValueError(
+                "eval.full_max_examples must not be less than eval.max_examples"
+            )
         if settings.eval.temperature < 0:
             raise ValueError("eval.temperature must be zero or greater")
         if not 0 < settings.eval.top_p <= 1:
@@ -220,13 +231,31 @@ def validate_settings(settings: Settings) -> None:
             raise ValueError("eval.presence_penalty must be zero or greater")
         if tuple(sorted(set(settings.eval.steps))) != settings.eval.steps:
             raise ValueError("eval.steps must be sorted and contain no duplicates")
+        if tuple(sorted(set(settings.eval.full_steps))) != settings.eval.full_steps:
+            raise ValueError(
+                "eval.full_steps must be sorted and contain no duplicates"
+            )
         if any(
             step < 1 or step > settings.training.max_steps
             for step in settings.eval.steps
         ):
             raise ValueError("Each eval step must be in the training step range")
+        if any(
+            step < 1 or step > settings.training.max_steps
+            for step in settings.eval.full_steps
+        ):
+            raise ValueError(
+                "Each full eval step must be in the training step range"
+            )
         if settings.training.max_steps not in settings.eval.steps:
             raise ValueError("eval.steps must contain the final training step")
+        if settings.training.max_steps not in settings.eval.full_steps:
+            raise ValueError("eval.full_steps must contain the final training step")
+        all_eval_steps = settings.eval.steps + settings.eval.full_steps
+        if any(step % settings.training.save_steps for step in all_eval_steps):
+            raise ValueError(
+                "Each eval step must be a multiple of training.save_steps"
+            )
 
 
 def load_settings(path: str | Path) -> Settings:
@@ -334,10 +363,14 @@ def load_settings(path: str | Path) -> Settings:
             ),
             split=str(evaluation.get("split", "train")),
             steps=tuple(int(step) for step in evaluation.get("steps", [])),
+            full_steps=tuple(
+                int(step) for step in evaluation.get("full_steps", [])
+            ),
             max_examples=int(evaluation["max_examples"]),
+            full_max_examples=int(evaluation["full_max_examples"]),
             balanced=bool(evaluation.get("balanced", False)),
             seed=int(evaluation.get("seed", 42)),
-            max_new_tokens=int(evaluation["max_new_tokens"]),
+            max_length=int(evaluation["max_length"]),
             temperature=float(evaluation.get("temperature", 0.0)),
             top_p=float(evaluation.get("top_p", 1.0)),
             top_k=int(evaluation.get("top_k", 0)),

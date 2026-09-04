@@ -14,12 +14,31 @@ from utils import (
     MATH500_SUBJECTS,
     extract_boxed_answer,
     grade_math_response,
+    _reached_generation_limit,
     select_balanced_math500_subset,
     split_reasoning_and_final_response,
 )
 
 
 class EvalTest(unittest.TestCase):
+    def test_detects_limit_without_eos_token(self) -> None:
+        self.assertTrue(
+            _reached_generation_limit(
+                torch.tensor([10, 11, 12]),
+                eos_token_id=2,
+                max_new_tokens=3,
+            )
+        )
+
+    def test_does_not_treat_batch_padding_as_reaching_limit(self) -> None:
+        self.assertFalse(
+            _reached_generation_limit(
+                torch.tensor([10, 2, 2]),
+                eos_token_id=2,
+                max_new_tokens=3,
+            )
+        )
+
     def test_extracts_last_balanced_box(self) -> None:
         text = r"First \boxed{1}, then \boxed{\frac{6}{2}}."
         self.assertEqual(extract_boxed_answer(text), r"\frac{6}{2}")

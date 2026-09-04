@@ -14,18 +14,14 @@ The student is `Qwen/Qwen3.5-0.8B-Base`. The off-policy teacher is
 
 - All 7,500 unique training examples from the seven
   `EleutherAI/hendrycks_math` subjects
-- 7,500 total training prompts with no repeated examples
-- 2,048-token training limit
+- 30,000 total training prompts, which makes four passes over the fixed data
+- A 2,048-token total sequence limit for training and evaluation
 - Device batch size 2 with ten gradient-accumulation passes
 - Effective batch size 20
-- 375 optimizer steps
-- Evaluation after every 1,000 training prompts and after the final 7,500
-  prompts
-- 50 held-out examples from `HuggingFaceH4/MATH-500`
-- Exactly 10 evaluation examples from each difficulty level
-- Seven or eight evaluation examples from each subject
-- One or two examples from every subject-level group
-- 1,024 generated tokens per evaluation example
+- 1,500 optimizer steps
+- A balanced 50-problem evaluation after every 1,000 training prompts
+- A full 500-problem evaluation after every 5,000 training prompts
+- The generation budget is 2,048 minus the padded prompt length
 - LoRA rank 32
 - Teacher top-20 probabilities for off-policy distillation
 
@@ -120,15 +116,19 @@ Use the actual mount path for your RunPod volume. The Pod storage page shows
 this path.
 
 `resume_from_checkpoint: auto` resumes from the newest checkpoint in the
-off-policy output directory.
+off-policy output directory. Each scheduled evaluation starts after its
+checkpoint is saved. Evaluation records are saved after each batch. If an
+evaluation stops, the next run continues with its unfinished problems.
 
 ## Outputs
 
 The final LoRA adapter is in
-`runs/qwen3.5-0.8b-base-math-off-policy-7500-batch2/final_adapter`.
+`runs/qwen3.5-0.8b-base-math-off-policy-30k-batch2/final_adapter`.
 
-Evaluation records are in the run's `evals` directory. Training and evaluation
-metrics are also sent to the W&B project in `config.yaml`.
+Evaluation records are in the run's `evals` directory. The files use `subset`
+or `full` in their names. Training and evaluation metrics are also sent to the
+W&B project in `config.yaml`. The two score series are
+`eval/math_subset/score` and `eval/math_full/score`.
 
 Run local tests with:
 
