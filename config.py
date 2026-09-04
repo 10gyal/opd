@@ -191,10 +191,10 @@ def validate_settings(settings: Settings) -> None:
     if settings.training.weight_decay < 0:
         raise ValueError("training.weight_decay must be zero or greater")
 
-    if settings.dataset.max_examples != settings.training.expected_examples:
+    if settings.dataset.max_examples > settings.training.expected_examples:
         raise ValueError(
-            "dataset.max_examples must equal per_device_train_batch_size * "
-            "gradient_accumulation_steps * max_steps for a one-GPU run"
+            "dataset.max_examples must not exceed the total number of training "
+            "prompts"
         )
 
     _positive(settings.distillation.top_k, "distillation.top_k")

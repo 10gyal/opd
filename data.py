@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from datasets import IterableDataset, interleave_datasets, load_dataset
+from datasets import IterableDataset, concatenate_datasets, load_dataset
 
 from config import DatasetSettings
 
@@ -78,7 +78,7 @@ def load_training_dataset(
     dataset = (
         sources[0]
         if len(sources) == 1
-        else interleave_datasets(sources, seed=settings.seed)
+        else concatenate_datasets(sources)
     )
     if settings.levels:
         dataset = dataset.filter(

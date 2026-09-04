@@ -12,11 +12,14 @@ The student is `Qwen/Qwen3.5-0.8B-Base`. The off-policy teacher is
 
 ## Experiment
 
-- 512 examples from all seven `EleutherAI/hendrycks_math` subjects
+- All 7,500 unique training examples from the seven
+  `EleutherAI/hendrycks_math` subjects
+- 10,000 total training prompts; the data loader repeats 2,500 examples after
+  the first complete pass
 - 2,048-token training limit
-- Effective batch size 32
-- 16 optimizer steps
-- Evaluation after steps 8 and 16
+- Effective batch size 25
+- 400 optimizer steps
+- Evaluation after every 1,000 training prompts, at steps 40 through 400
 - 50 held-out examples from `HuggingFaceH4/MATH-500`
 - Exactly 10 evaluation examples from each difficulty level
 - Seven or eight evaluation examples from each subject
@@ -54,7 +57,7 @@ cache does not match `config.yaml`.
 The default cache directory is:
 
 ```text
-teacher_targets/qwen3.5-4b-bf16-hendrycks-math-top20
+teacher_targets/qwen3.5-4b-bf16-hendrycks-math-7500-top20
 ```
 
 The repository ignores `teacher_targets/`. Git does not upload this data.
@@ -105,11 +108,11 @@ both commands:
 ```bash
 python precompute_teacher_targets.py \
   --config config.yaml \
-  --output-dir /workspace/opd-cache/qwen3.5-4b-bf16-hendrycks-math-top20
+  --output-dir /workspace/opd-cache/qwen3.5-4b-bf16-hendrycks-math-7500-top20
 
 python train_off_policy.py \
   --config config.yaml \
-  --teacher-targets /workspace/opd-cache/qwen3.5-4b-bf16-hendrycks-math-top20
+  --teacher-targets /workspace/opd-cache/qwen3.5-4b-bf16-hendrycks-math-7500-top20
 ```
 
 Use the actual mount path for your RunPod volume. The Pod storage page shows
@@ -121,7 +124,7 @@ off-policy output directory.
 ## Outputs
 
 The final LoRA adapter is in
-`runs/qwen3.5-0.8b-base-math-off-policy/final_adapter`.
+`runs/qwen3.5-0.8b-base-math-off-policy-10k/final_adapter`.
 
 Evaluation records are in the run's `evals` directory. Training and evaluation
 metrics are also sent to the W&B project in `config.yaml`.

@@ -17,18 +17,22 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(settings.teacher_targets.batch_size, 4)
         self.assertEqual(settings.teacher_targets.shard_size, 32)
         self.assertEqual(settings.teacher_targets.storage_dtype, "float16")
-        self.assertEqual(settings.dataset.max_examples, 512)
+        self.assertEqual(settings.dataset.max_examples, 7500)
         self.assertEqual(len(settings.dataset.config_names), 7)
         self.assertEqual(settings.dataset.levels, ())
-        self.assertEqual(settings.training.effective_batch_size, 32)
-        self.assertEqual(settings.training.max_steps, 16)
-        self.assertEqual(settings.eval.steps, (8, 16))
+        self.assertEqual(settings.training.effective_batch_size, 25)
+        self.assertEqual(settings.training.expected_examples, 10000)
+        self.assertEqual(settings.training.max_steps, 400)
+        self.assertEqual(
+            settings.eval.steps,
+            (40, 80, 120, 160, 200, 240, 280, 320, 360, 400),
+        )
         self.assertEqual(settings.eval.max_new_tokens, 1024)
         self.assertEqual(settings.eval.max_examples, 50)
         self.assertTrue(settings.eval.balanced)
         self.assertEqual(settings.eval.min_p, 0.0)
         self.assertEqual(settings.eval.presence_penalty, 0.0)
-        self.assertEqual(settings.training.save_steps, 8)
+        self.assertEqual(settings.training.save_steps, 40)
         self.assertEqual(settings.distillation.top_k, 20)
 
 
