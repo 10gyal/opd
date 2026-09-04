@@ -20,6 +20,8 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(settings.dataset.max_examples, 7500)
         self.assertEqual(len(settings.dataset.config_names), 7)
         self.assertEqual(settings.dataset.levels, ())
+        self.assertEqual(settings.training.per_device_train_batch_size, 5)
+        self.assertEqual(settings.training.gradient_accumulation_steps, 5)
         self.assertEqual(settings.training.effective_batch_size, 25)
         self.assertEqual(settings.training.expected_examples, 7500)
         self.assertEqual(settings.training.max_steps, 300)

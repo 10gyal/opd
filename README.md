@@ -16,6 +16,7 @@ The student is `Qwen/Qwen3.5-0.8B-Base`. The off-policy teacher is
   `EleutherAI/hendrycks_math` subjects
 - 7,500 total training prompts with no repeated examples
 - 2,048-token training limit
+- Device batch size 5 with five gradient-accumulation passes
 - Effective batch size 25
 - 300 optimizer steps
 - Evaluation after every 1,000 training prompts and after the final 7,500
