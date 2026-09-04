@@ -21,11 +21,11 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(len(settings.dataset.config_names), 7)
         self.assertEqual(settings.dataset.levels, ())
         self.assertEqual(settings.training.effective_batch_size, 25)
-        self.assertEqual(settings.training.expected_examples, 10000)
-        self.assertEqual(settings.training.max_steps, 400)
+        self.assertEqual(settings.training.expected_examples, 7500)
+        self.assertEqual(settings.training.max_steps, 300)
         self.assertEqual(
             settings.eval.steps,
-            (40, 80, 120, 160, 200, 240, 280, 320, 360, 400),
+            (40, 80, 120, 160, 200, 240, 280, 300),
         )
         self.assertEqual(settings.eval.max_new_tokens, 1024)
         self.assertEqual(settings.eval.max_examples, 50)
