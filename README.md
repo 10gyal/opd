@@ -16,9 +16,9 @@ The student is `Qwen/Qwen3.5-0.8B-Base`. The off-policy teacher is
   `EleutherAI/hendrycks_math` subjects
 - 7,500 total training prompts with no repeated examples
 - 2,048-token training limit
-- Device batch size 5 with five gradient-accumulation passes
-- Effective batch size 25
-- 300 optimizer steps
+- Device batch size 2 with ten gradient-accumulation passes
+- Effective batch size 20
+- 375 optimizer steps
 - Evaluation after every 1,000 training prompts and after the final 7,500
   prompts
 - 50 held-out examples from `HuggingFaceH4/MATH-500`
@@ -125,7 +125,7 @@ off-policy output directory.
 ## Outputs
 
 The final LoRA adapter is in
-`runs/qwen3.5-0.8b-base-math-off-policy-7500/final_adapter`.
+`runs/qwen3.5-0.8b-base-math-off-policy-7500-batch2/final_adapter`.
 
 Evaluation records are in the run's `evals` directory. Training and evaluation
 metrics are also sent to the W&B project in `config.yaml`.

@@ -62,17 +62,17 @@ dataset:
 
 training:
   max_length: 2048
-  per_device_train_batch_size: 5
-  # 25 prompts per step times 300 steps gives 7,500 training prompts.
-  gradient_accumulation_steps: 5
-  max_steps: 300
+  per_device_train_batch_size: 2
+  # 20 prompts per step times 375 steps gives 7,500 training prompts.
+  gradient_accumulation_steps: 10
+  max_steps: 375
   learning_rate: 0.0002
   lr_scheduler_type: linear
   warmup_ratio: 0.0
   weight_decay: 0.0
   max_grad_norm: 1.0
   logging_steps: 1
-  save_steps: 40
+  save_steps: 50
   save_total_limit: 2
   gradient_checkpointing: true
   bf16: true
@@ -86,14 +86,14 @@ eval:
   config_name: null
   split: test
   steps:
-    - 40
-    - 80
-    - 120
-    - 160
+    - 50
+    - 100
+    - 150
     - 200
-    - 240
-    - 280
+    - 250
     - 300
+    - 350
+    - 375
   max_examples: 50
   balanced: true
   seed: 42
@@ -112,10 +112,10 @@ eval:
     Solution:
 
 distillation:
-  output_dir: ./runs/qwen3.5-0.8b-base-math-off-policy-7500
+  output_dir: ./runs/qwen3.5-0.8b-base-math-off-policy-7500-batch2
   top_k: 20
   temperature: 1.0
-  wandb_run_name: qwen3.5-0.8b-base-math-off-policy-7500
+  wandb_run_name: qwen3.5-0.8b-base-math-off-policy-7500-batch2
 
 logging:
   wandb_project: opd
